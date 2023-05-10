@@ -15,11 +15,11 @@ public class JsonPlaceHolder {
 
 
         String newUserJson = "{\"name\": \"John Doe\", \"username\": \"johndoe\", \"email\": \"johndoe@example.com\"}";
-        String createdUserJson = apiClient.post("/users", newUserJson);
+        User createdUserJson = apiClient.post("/users", newUserJson);
         System.out.println("Created user: " + createdUserJson);
 
 
-        String updatedUserJson = apiClient.put("/users/1", "{\"name\": \"Jane Doe\"}");
+        User updatedUserJson = apiClient.put("/users/1", "{\"name\": \"Jane Doe\"}");
         System.out.println("Updated user: " + updatedUserJson);
 
 
@@ -27,28 +27,28 @@ public class JsonPlaceHolder {
         System.out.println("Delete user response code: " + responseCode);
 
 
-        String allUsersJson = apiClient.get("/users");
+        User allUsersJson = apiClient.get("/users");
         System.out.println("All users: " + allUsersJson);
 
 
-        String userByIdJson = apiClient.get("/users/2");
+        User userByIdJson = apiClient.get("/users/2");
         System.out.println("User by id: " + userByIdJson);
 
 
-        String userByUsernameJson = apiClient.get("/users?username=johndoe");
+        User userByUsernameJson = apiClient.get("/users?username=johndoe");
         System.out.println("User by username: " + userByUsernameJson);
 
         apiClient.getOpenUserTodos(1);
     }
 
-    private String get(String path) throws IOException {
+    private User get(String path) throws IOException {
         URL url = new URL(BASE_URL + path);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod("GET");
         return getResponse(con);
     }
 
-    private String post(String path, String jsonBody) throws IOException {
+    private User post(String path, String jsonBody) throws IOException {
         URL url = new URL(BASE_URL + path);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod("POST");
@@ -60,7 +60,7 @@ public class JsonPlaceHolder {
         return getResponse(con);
     }
 
-    private String put(String path, String jsonBody) throws IOException {
+    private User put(String path, String jsonBody) throws IOException {
         URL url = new URL(BASE_URL + path);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod("PUT");
@@ -78,28 +78,32 @@ public class JsonPlaceHolder {
         con.setRequestMethod("DELETE");
         return con.getResponseCode();
     }
-
-    private String getResponse(HttpURLConnection con) throws IOException {
-        int responseCode = con.getResponseCode();
-        if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED) {
+    private User getResponse(HttpURLConnection con) throws IOException {
+        int status = con.getResponseCode();
+        if (status == HttpURLConnection.HTTP_OK) {
             BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            StringBuilder response = new StringBuilder();
-            String line;
-            while ((line = in.readLine()) != null) {
-                response.append(line);
+            String inputLine;
+            StringBuilder content = new StringBuilder();
+            while ((inputLine = in.readLine()) != null) {
+                content.append(inputLine);
             }
             in.close();
-            return response.toString();
+            con.disconnect();
+            return new User(content.toString());
         } else {
-            throw new IOException("Response code: " + responseCode);
+            con.disconnect();
+            throw new IOException("Request failed with error code " + status);
         }
     }
+
     private static final String COMMENT_FILE_PATH = "user-%d-post-%d-comments.json";
 
-    public void getUserPostComments(int userId) throws IOException {
-        String userPostsJson = get("/users/" + userId + "/posts");
-        JSONArray userPosts = new JSONArray(userPostsJson);
+    public JSONArray getUserPosts(int userId) throws IOException {
+        User userPostsJson = get("/users/" + userId + "/posts");
+        return new JSONArray(userPostsJson);
+    }
 
+    public JSONObject findLatestPost(JSONArray userPosts) {
         JSONObject latestPost = null;
         int latestPostId = 0;
         for (int i = 0; i < userPosts.length(); i++) {
@@ -110,31 +114,31 @@ public class JsonPlaceHolder {
                 latestPostId = postId;
             }
         }
+        return latestPost;
+    }
 
-        if (latestPost != null) {
+    public JSONArray getPostComments(int postId) throws IOException {
+        User commentsJson = get("/posts/" + postId + "/comments");
+        return new JSONArray(commentsJson);
+    }
 
-            String commentsJson = get("/posts/" + latestPost.getInt("id") + "/comments");
-            JSONArray comments = new JSONArray(commentsJson);
-
-            String filename = String.format(COMMENT_FILE_PATH, userId, latestPost.getInt("id"));
-            try (FileWriter file = new FileWriter(filename)) {
-                file.write(comments.toString());
-                System.out.println("Comments written to file: " + filename);
-            }
-        } else {
-            System.out.println("User has no posts.");
+    public void writeCommentsToFile(int userId, int postId, JSONArray comments) throws IOException {
+        String filename = String.format(COMMENT_FILE_PATH, userId, postId);
+        try (FileWriter file = new FileWriter(filename)) {
+            file.write(comments.toString());
+            System.out.println("Comments written to file: " + filename);
         }
     }
-    public void getOpenUserTodos(int userId) throws IOException {
-        String userTodosJson = get("/users/" + userId + "/todos");
+    public JSONObject getOpenUserTodos(int userId) throws IOException {
+        User userTodosJson = get("/users/" + userId + "/todos");
         JSONArray userTodos = new JSONArray(userTodosJson);
 
         for (int i = 0; i < userTodos.length(); i++) {
             JSONObject todo = userTodos.getJSONObject(i);
             boolean completed = todo.getBoolean("completed");
-            if (!completed) {
-                System.out.println(todo.toString());
-            }
+            if (!completed)
+                return todo;
         }
+        return null;
     }
 }
